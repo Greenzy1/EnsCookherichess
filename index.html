@@ -2,61 +2,103 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EnsCookherichess - Ücretsiz AI Gurme Rehberi</title>
-    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>EnsCookherichess - Maps</title>
+    <!-- Google Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    
+    <!-- Leaflet & CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="assets/css/style.css">
 </head>
 <body>
 
-    <aside id="sidebar" class="sidebar">
-        <div class="search-header">
-            <div class="search-box">
-                <i class="fas fa-map-marker-alt text-muted"></i>
-                <input type="text" id="searchInput" placeholder="Yakınımdaki restoranları bul...">
-                <button id="searchBtn" class="search-btn"><i class="fas fa-search"></i></button>
-            </div>
-            <div class="filters">
-                <button class="filter-chip active">Tümü</button>
-                <button class="filter-chip" data-type="restaurant">Restoran</button>
-                <button class="filter-chip" data-type="cafe">Kafe</button>
-                <button class="filter-chip" data-type="fast_food">Hızlı Yemek</button>
-            </div>
+    <!-- Harita (Arka Plan) -->
+    <div id="map"></div>
+
+    <!-- Arama Çubuğu (Floating) -->
+    <div class="search-container shadow-card">
+        <div class="search-box">
+            <button id="menuBtn" class="icon-btn"><span class="material-icons">menu</span></button>
+            <input type="text" id="searchInput" placeholder="Google Haritalar'da arayın">
+            <button id="searchBtn" class="icon-btn search-trigger"><span class="material-icons">search</span></button>
+            <span class="divider"></span>
+            <button id="directionBtn" class="icon-btn text-blue"><span class="material-icons">directions</span></button>
         </div>
+        
+        <!-- Filtreler -->
+        <div class="filters-scroll">
+            <button class="chip active" data-query="restaurant">Restoranlar</button>
+            <button class="chip" data-query="cafe">Kafeler</button>
+            <button class="chip" data-query="fast_food">Fast Food</button>
+            <button class="chip" data-query="hotel">Oteller</button>
+            <button class="chip" data-query="supermarket">Marketler</button>
+        </div>
+    </div>
+
+    <!-- Sonuç Paneli (Sol Panel / Mobil Bottom Sheet) -->
+    <div id="sidebarPanel" class="sidebar-panel shadow-card">
+        <div class="panel-handle mobile-only"></div>
         <div id="resultsList" class="results-list">
-            <div class="text-center p-5 text-muted">
-                <i class="fas fa-search-location fa-3x mb-3"></i>
-                <p>Konum izni ver ve keşfe başla!</p>
+            <!-- Başlangıç Ekranı -->
+            <div class="empty-state">
+                <img src="https://www.gstatic.com/images/branding/product/2x/maps_96in128dp.png" alt="Maps" width="64">
+                <h3>Bölgedeki restoranları keşfedin</h3>
+                <p>Konumunuzu paylaşarak veya arama yaparak başlayın.</p>
+                <button id="locateBtn" class="btn-primary">Konumumu Bul</button>
             </div>
         </div>
-    </aside>
+    </div>
 
-    <main id="map"></main>
+    <!-- Detay Paneli (Mekan Tıklanınca Açılır) -->
+    <div id="detailPanel" class="detail-panel shadow-card">
+        <div class="detail-header-img" id="placeImage">
+            <button class="back-btn" onclick="closeDetail()"><span class="material-icons">arrow_back</span></button>
+        </div>
+        <div class="detail-content">
+            <h1 id="placeName">Mekan İsmi</h1>
+            <div class="rating-row">
+                <span class="rating-num">4.5</span>
+                <div class="stars"><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star-half-alt"></i></div>
+                <span class="review-count">(OSM Verisi)</span>
+            </div>
+            <div class="action-buttons">
+                <button class="action-btn"><span class="material-icons text-blue">directions</span><div>Yol Tarifi</div></button>
+                <button class="action-btn"><span class="material-icons text-blue">save</span><div>Kaydet</div></button>
+                <button class="action-btn"><span class="material-icons text-blue">share</span><div>Paylaş</div></button>
+            </div>
+            <hr>
+            
+            <!-- AI Bölümü -->
+            <div class="ai-insight-box">
+                <div class="ai-header">
+                    <span class="material-icons ai-sparkle">auto_awesome</span>
+                    <span>EnsAI Özeti</span>
+                </div>
+                <p id="aiContent" class="ai-text">Analiz bekleniyor...</p>
+                <button id="triggerAiBtn" class="ai-action-btn">Detaylı Analiz Et</button>
+            </div>
 
-    <div id="detailPanel" class="detail-panel">
-        <div id="detailContent"></div>
-        <div class="ai-section">
-            <button id="askAiBtn" class="btn-ai">
-                <i class="fas fa-wand-magic-sparkles"></i> EnsAI Analizi Al
-            </button>
-            <div id="aiResponse" class="ai-bubble d-none"></div>
+            <div class="place-info">
+                <div class="info-row">
+                    <span class="material-icons">restaurant</span>
+                    <span id="placeType">Restoran Tipi</span>
+                </div>
+                <div class="info-row">
+                    <span class="material-icons">schedule</span>
+                    <span id="placeHours" class="text-green">Şu an açık</span>
+                </div>
+                 <div class="info-row">
+                    <span class="material-icons">location_on</span>
+                    <span id="placeAddress">Adres</span>
+                </div>
+            </div>
         </div>
     </div>
 
-    <div id="aiChatToggle" class="chat-toggle">
-        <i class="fas fa-robot"></i>
-    </div>
-    <div id="aiChatWindow" class="chat-window d-none">
-        <div class="chat-header">EnsAI Asistan</div>
-        <div id="chatMessages" class="chat-messages"></div>
-        <div class="chat-input-area">
-            <input type="text" id="chatInput" placeholder="Bana bir yer bul...">
-            <button id="sendChat"><i class="fas fa-paper-plane"></i></button>
-        </div>
-    </div>
-
+    <!-- Scripts -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="assets/js/api.js"></script>
     <script src="assets/js/app.js"></script>

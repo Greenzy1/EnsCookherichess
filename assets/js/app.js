@@ -1,180 +1,242 @@
 /**
- * EnsCookherichess - OpenStreetMap & Overpass Logic (No-Card Version)
+ * EnsCookherichess - Google Maps Clone Logic
  */
 let map;
 let markers = [];
-let userLocation = { lat: 41.0082, lng: 28.9784 }; // Istanbul
+let userMarker = null;
+let currentPlace = null;
+
+// Başlangıç Konumu (İstanbul)
+let mapCenter = { lat: 41.0082, lng: 28.9784 };
+
+document.addEventListener('DOMContentLoaded', () => {
+    initMap();
+    setupUI();
+});
 
 function initMap() {
-    map = L.map('map', { zoomControl: false }).setView([userLocation.lat, userLocation.lng], 14);
-    
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
+    map = L.map('map', { zoomControl: false }).setView([mapCenter.lat, mapCenter.lng], 13);
+
+    // Google Maps Benzeri Temiz Harita Katmanı (CartoDB Voyager)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 20
     }).addTo(map);
 
+    // Sağ Alt Zoom Kontrolü
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    // Kullanıcı Konumu
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition((pos) => {
-            userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-            map.setView([userLocation.lat, userLocation.lng], 15);
-            
-            L.circleMarker([userLocation.lat, userLocation.lng], {
-                radius: 10,
-                fillColor: "#1A73E8",
-                color: "#fff",
-                weight: 2,
-                opacity: 1,
-                fillOpacity: 0.8
-            }).addTo(map).bindPopup("Buradasın");
-
-            fetchPlaces(); // Restoranları çek
-        });
-    }
-
-    setupUI();
+    // Konum İzni İste
+    locateUser();
 }
 
-/**
- * Overpass API ile Restoranları Çekme
- */
-async function fetchPlaces(filterType = 'restaurant') {
-    const list = document.getElementById("resultsList");
-    list.innerHTML = '<div class="text-center p-5"><i class="fas fa-spinner fa-spin fa-2x"></i><p>Çevredeki mekanlar taranıyor...</p></div>';
+function locateUser() {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                mapCenter = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                map.setView([mapCenter.lat, mapCenter.lng], 15);
+                
+                // Kullanıcı Marker (Mavi Nokta)
+                if (userMarker) map.removeLayer(userMarker);
+                userMarker = L.circleMarker([mapCenter.lat, mapCenter.lng], {
+                    radius: 8,
+                    fillColor: "#4285F4",
+                    color: "#ffffff",
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 1
+                }).addTo(map);
 
-    // Overpass Query: Verilen koordinatın 2000m çevresindeki amenity=restaurant/cafe leri bul
-    const radius = 2000;
-    const query = `
-        [out:json];
+                // Otomatik Arama Başlat
+                searchPlaces('restaurant');
+            },
+            () => console.log("Konum izni reddedildi.")
+        );
+    }
+}
+
+// --- ARAMA MANTIĞI (Nominatim Geocoding) ---
+async function handleSearch() {
+    const query = document.getElementById('searchInput').value;
+    if (!query) return;
+
+    // 1. Önce Konum Ara (Örn: "Besiktas")
+    try {
+        const geoUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`;
+        const geoRes = await fetch(geoUrl);
+        const geoData = await geoRes.json();
+
+        if (geoData.length > 0) {
+            // Haritayı Oraya Taşı
+            const lat = parseFloat(geoData[0].lat);
+            const lon = parseFloat(geoData[0].lon);
+            map.setView([lat, lon], 15);
+            mapCenter = { lat, lng: lon };
+            
+            // O Bölgedeki Restoranları Getir
+            searchPlaces('restaurant'); 
+        } else {
+            // Konum bulunamadıysa, mevcut harita merkezinde kelime araması yap (Örn: "Burger")
+            searchPlaces(query); 
+        }
+    } catch (e) {
+        console.error("Arama hatası:", e);
+    }
+}
+
+// --- MEKANLARI GETİR (Overpass API) ---
+async function searchPlaces(queryType) {
+    const list = document.getElementById('resultsList');
+    const sidebar = document.getElementById('sidebarPanel');
+    
+    // Yükleniyor...
+    sidebar.classList.add('active');
+    list.innerHTML = '<div class="empty-state"><i class="fas fa-spinner fa-spin fa-2x"></i><p>Aranıyor...</p></div>';
+
+    // Overpass Query (Etraftaki 1.5km)
+    let amenityType = 'restaurant|cafe|fast_food';
+    if (queryType === 'hotel') amenityType = 'hotel';
+    if (queryType === 'supermarket') amenityType = 'supermarket';
+    
+    // Eğer spesifik bir kelime aranıyorsa (örn: "Burger") name filtresi ekle
+    let nameFilter = '';
+    if (!['restaurant', 'cafe', 'fast_food', 'hotel', 'supermarket'].includes(queryType)) {
+        nameFilter = `[name~"${queryType}",i]`;
+    }
+
+    const overpassQuery = `
+        [out:json][timeout:25];
         (
-          node["amenity"~"restaurant|cafe|fast_food"](around:${radius},${userLocation.lat},${userLocation.lng});
-          way["amenity"~"restaurant|cafe|fast_food"](around:${radius},${userLocation.lat},${userLocation.lng});
+          node["amenity"~"${amenityType}"]${nameFilter}(around:1500,${mapCenter.lat},${mapCenter.lng});
+          way["amenity"~"${amenityType}"]${nameFilter}(around:1500,${mapCenter.lat},${mapCenter.lng});
         );
         out center;
     `;
 
     try {
-        const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+        const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`);
         const data = await response.json();
-        const results = data.elements;
-
-        clearMarkers();
-        renderList(results);
+        
+        renderResults(data.elements);
     } catch (error) {
-        console.error("Overpass Error:", error);
-        list.innerHTML = '<p class="p-4 text-danger">Mekanlar yüklenemedi.</p>';
+        list.innerHTML = '<div class="empty-state"><p>Veri alınamadı.</p></div>';
     }
 }
 
-function renderList(results) {
-    const list = document.getElementById("resultsList");
-    list.innerHTML = "";
+function renderResults(places) {
+    const list = document.getElementById('resultsList');
+    list.innerHTML = '';
+    
+    // Markerları Temizle
+    markers.forEach(m => map.removeLayer(m));
+    markers = [];
 
-    if (results.length === 0) {
-        list.innerHTML = '<p class="p-5 text-center">Yakınlarda mekan bulunamadı.</p>';
+    if (places.length === 0) {
+        list.innerHTML = '<div class="empty-state"><p>Bu bölgede sonuç bulunamadı.</p></div>';
         return;
     }
 
-    results.forEach(place => {
-        const name = place.tags.name || "İsimsiz Mekan";
-        const type = place.tags.amenity || "Restoran";
-        const cuisine = place.tags.cuisine || "Genel Mutfak";
+    places.forEach(place => {
         const lat = place.lat || place.center.lat;
         const lon = place.lon || place.center.lon;
+        const name = place.tags.name || 'İsimsiz Mekan';
+        const type = place.tags.amenity || 'Mekan';
+        const address = place.tags['addr:street'] || 'Adres yok';
 
-        // Kart Oluştur
-        const item = document.createElement("div");
-        item.className = "restaurant-card";
-        item.innerHTML = `
-            <div class="card-img" style="background-color: #e8f0fe; display: flex; align-items: center; justify-content: center;">
-                <i class="fas fa-utensils fa-2x text-primary"></i>
-            </div>
-            <div class="card-info">
-                <h3>${name}</h3>
-                <div class="meta">
-                    <span class="type">${type.replace('_', ' ')}</span>
-                </div>
-                <p class="cuisine">${cuisine}</p>
+        // Listeye Ekle
+        const div = document.createElement('div');
+        div.className = 'result-item';
+        div.innerHTML = `
+            <div class="result-icon"><i class="fas fa-utensils"></i></div>
+            <div>
+                <div style="font-weight:500">${name}</div>
+                <div style="font-size:13px; color:#5f6368">${type} • ${address}</div>
+                <div style="font-size:12px; color:#e7711b">★★★★☆ (OSM)</div>
             </div>
         `;
-        
-        item.onclick = () => {
-            map.setView([lat, lon], 17);
-            showDetails(place);
-        };
-        list.appendChild(item);
+        div.onclick = () => openDetail(place);
+        list.appendChild(div);
 
-        // Marker Ekle
-        const marker = L.marker([lat, lon]).addTo(map)
-            .bindPopup(`<b>${name}</b><br>${cuisine}`);
-        marker.on('click', () => showDetails(place));
+        // Haritaya Marker Ekle
+        const marker = L.marker([lat, lon], {
+            icon: L.divIcon({
+                className: 'custom-pin',
+                html: `<div style="background:#EA4335; width:12px; height:12px; border-radius:50%; border:2px solid white; box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>`,
+                iconSize: [16, 16]
+            })
+        }).addTo(map);
+        
+        marker.on('click', () => openDetail(place));
         markers.push(marker);
     });
 }
 
-function showDetails(place) {
-    const panel = document.getElementById("detailPanel");
-    const content = document.getElementById("detailContent");
-    const tags = place.tags;
-
-    content.innerHTML = `
-        <div class="detail-header" style="background: var(--primary); display: flex; align-items: center; justify-content: center;">
-             <i class="fas fa-store fa-5x text-white"></i>
-             <button class="close-btn-overlay" onclick="togglePanel(false)"><i class="fas fa-arrow-left"></i></button>
-        </div>
-        <div class="p-4">
-            <h2>${tags.name || 'İsimsiz Mekan'}</h2>
-            <p class="text-muted"><i class="fas fa-map-marker-alt"></i> ${tags['addr:street'] || 'Adres bilgisi yok'} ${tags['addr:housenumber'] || ''}</p>
-            <hr>
-            <h5>Detaylar</h5>
-            <ul class="list-unstyled">
-                <li><strong>Mutfak:</strong> ${tags.cuisine || 'Belirtilmemiş'}</li>
-                <li><strong>Çalışma Saatleri:</strong> ${tags.opening_hours || 'Bilinmiyor'}</li>
-                <li><strong>Dış Mekan:</strong> ${tags.outdoor_seating === 'yes' ? 'Evet' : 'Hayır'}</li>
-            </ul>
-        </div>
-    `;
-    panel.classList.add("active");
+// --- DETAY PANELI & AI ---
+function openDetail(place) {
+    currentPlace = place;
+    const panel = document.getElementById('detailPanel');
+    const sidebar = document.getElementById('sidebarPanel');
     
-    document.getElementById("askAiBtn").onclick = () => askAI(place);
+    // Mobilde sidebar'ı kapat, detayı aç
+    sidebar.classList.remove('active');
+    panel.classList.add('active');
+
+    // Bilgileri Doldur
+    document.getElementById('placeName').innerText = place.tags.name || 'İsimsiz';
+    document.getElementById('placeType').innerText = (place.tags.cuisine || place.tags.amenity).toUpperCase();
+    document.getElementById('placeAddress').innerText = place.tags['addr:street'] || 'Adres bilgisi girilmemiş';
+    document.getElementById('aiContent').innerText = 'Analiz için butona basın...';
+    
+    // Haritayı Ortala (Mobilde biraz yukarı kaydır ki panel kapatmasın)
+    const lat = place.lat || place.center.lat;
+    const lon = place.lon || place.center.lon;
+    map.setView([lat + 0.002, lon], 16); 
 }
 
-async function askAI(place) {
-    const aiBox = document.getElementById("aiResponse");
-    aiBox.classList.remove("d-none");
-    aiBox.innerHTML = "EnsAI analiz ediyor...";
+function closeDetail() {
+    document.getElementById('detailPanel').classList.remove('active');
+    // Masaüstünde sidebar geri gelsin
+    if (window.innerWidth > 768) {
+        document.getElementById('sidebarPanel').classList.add('active');
+    }
+}
 
+// AI Butonu
+document.getElementById('triggerAiBtn').addEventListener('click', async () => {
+    const aiBox = document.getElementById('aiContent');
+    aiBox.innerText = 'EnsAI düşünüyor...';
+    
     const result = await ApiService.askGemini({
         mode: 'analysis',
-        place_name: place.tags.name,
-        place_details: JSON.stringify(place.tags), // Tüm OSM etiketlerini gönder
-        rating: "OSM (Kullanıcı yorumu yok)",
+        place_name: currentPlace.tags.name,
+        place_details: JSON.stringify(currentPlace.tags),
+        rating: 'Bilinmiyor',
         reviews: []
     });
     
-    aiBox.innerHTML = result.answer;
-}
+    aiBox.innerText = result.answer;
+});
 
-function clearMarkers() {
-    markers.forEach(m => map.removeLayer(m));
-    markers = [];
-}
-
-function togglePanel(show) {
-    document.getElementById("detailPanel").classList.toggle("active", show);
-}
-
+// UI Eventleri
 function setupUI() {
-    document.getElementById("searchBtn").onclick = () => {
-        const q = document.getElementById("searchInput").value;
-        // Basitçe yeniden tara (Gerçekte Overpass query güncellenebilir)
-        fetchPlaces(); 
-    };
+    // Enter tuşu ile arama
+    document.getElementById('searchInput').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleSearch();
+    });
+    document.getElementById('searchBtn').addEventListener('click', handleSearch);
+    
+    // Filtre Chipleri
+    document.querySelectorAll('.chip').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+            e.target.classList.add('active');
+            searchPlaces(e.target.dataset.query);
+        });
+    });
 
-    document.getElementById("aiChatToggle").onclick = () => {
-        document.getElementById("aiChatWindow").classList.toggle("d-none");
-    };
+    // Konum Butonu
+    document.getElementById('locateBtn').addEventListener('click', locateUser);
+    document.getElementById('directionBtn').addEventListener('click', locateUser);
 }
-
-window.onload = initMap;
