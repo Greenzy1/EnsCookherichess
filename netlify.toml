@@ -1,0 +1,8 @@
+[build]
+  publish = "." # Sitenin ana klasörü (index.html burada)
+  functions = "netlify/functions" # Fonksiyonlarımızın yolu
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200

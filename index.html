@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EnsCookherichess - Ücretsiz AI Gurme Rehberi</title>
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+    <aside id="sidebar" class="sidebar">
+        <div class="search-header">
+            <div class="search-box">
+                <i class="fas fa-map-marker-alt text-muted"></i>
+                <input type="text" id="searchInput" placeholder="Yakınımdaki restoranları bul...">
+                <button id="searchBtn" class="search-btn"><i class="fas fa-search"></i></button>
+            </div>
+            <div class="filters">
+                <button class="filter-chip active">Tümü</button>
+                <button class="filter-chip" data-type="restaurant">Restoran</button>
+                <button class="filter-chip" data-type="cafe">Kafe</button>
+                <button class="filter-chip" data-type="fast_food">Hızlı Yemek</button>
+            </div>
+        </div>
+        <div id="resultsList" class="results-list">
+            <div class="text-center p-5 text-muted">
+                <i class="fas fa-search-location fa-3x mb-3"></i>
+                <p>Konum izni ver ve keşfe başla!</p>
+            </div>
+        </div>
+    </aside>
+
+    <main id="map"></main>
+
+    <div id="detailPanel" class="detail-panel">
+        <div id="detailContent"></div>
+        <div class="ai-section">
+            <button id="askAiBtn" class="btn-ai">
+                <i class="fas fa-wand-magic-sparkles"></i> EnsAI Analizi Al
+            </button>
+            <div id="aiResponse" class="ai-bubble d-none"></div>
+        </div>
+    </div>
+
+    <div id="aiChatToggle" class="chat-toggle">
+        <i class="fas fa-robot"></i>
+    </div>
+    <div id="aiChatWindow" class="chat-window d-none">
+        <div class="chat-header">EnsAI Asistan</div>
+        <div id="chatMessages" class="chat-messages"></div>
+        <div class="chat-input-area">
+            <input type="text" id="chatInput" placeholder="Bana bir yer bul...">
+            <button id="sendChat"><i class="fas fa-paper-plane"></i></button>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="assets/js/api.js"></script>
+    <script src="assets/js/app.js"></script>
+</body>
+</html>

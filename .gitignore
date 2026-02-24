@@ -1,0 +1,10 @@
+# Özel Ayarlar
+backend/config.php
+
+# XAMPP/Sunucu dosyaları
+.DS_Store
+thumbs.db
+
+# IDE dosyaları
+.vscode/
+.idea/
